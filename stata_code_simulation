@@ -1,0 +1,136 @@
+clear all
+
+tempname memory_holder
+
+postfile `memory_holder' double(	prev m_size ///
+									IPW_newu1 IPW_newu0 IPW_newuDif  ///
+									IPW_newn1 IPW_newn0 IPW_newnDif ///
+									IPW_part1 IPW_part0 IPW_partDif ///
+									AIPW1 AIPW0 AIPWDif ///
+									Gform1 Gform0 GformDif) using "sim_res.dta", replace
+
+set seed 12345678
+
+foreach intercept in  -3.757324 -2.882624 -1.865234 {
+
+if `intercept' == -3.757324 {
+	local prev = 0.05
+		}
+if `intercept' == -2.882624 {
+	local prev = 0.10
+		}
+if `intercept' == -1.865234 {
+	local prev = 0.20 
+		}
+			
+foreach m_size in 2000 5000 10000 {
+		
+quietly forvalues i = 1/10000 {
+
+di in red "PREV = `prev'; SS = `m_size'; RUN = `i'"
+clear 
+set obs `m_size'
+generate X1 = rnormal()
+generate X2 = rnormal()
+generate S = runiform() < invlogit( `intercept' + X1 + X2)
+generate A  = rbinomial(1, 0.5) if S == 1
+	replace A = 0 if A == .
+generate Y = (2 * A - 1) * (1 - X1 - X2)  + rnormal(0,1) if S == 1	
+	replace Y = 0 if Y == .
+	
+/* estimation of Pr[S = 1 | X] */
+logit S X1 X2 
+	predict prS
+/* estimation of Pr[A = 1 | X , S = 1] */
+logit A X1 X2 if S == 1
+	predict prA
+/* estimation of E[Y | X , A = a, S = 1] */
+regress Y X1 X2 if A == 1 & S == 1
+	predict Y1
+regress Y X1 X2 if A == 0 & S == 1
+	predict Y0
+/* weights for new IPW */
+generate w = (S/prS) * (A/prA + (1 - A)/(1-prA)) 
+/* weights for IPW part */
+generate wpart = S/prS 
+
+/* IPW, HT */
+generate SA1Y = Y * A * S * w
+generate SA0Y = Y * (1 - A) * S  * w
+summ SA1Y 
+	local New1 = r(mean)
+summ SA0Y
+	local New0 = r(mean)	
+local IPW_newu1 = `New1'
+local IPW_newu0 = `New0'
+local IPW_newuDif = `= `New1' - `New0' ' 
+	
+/* IPW, Hajek, normalized weights */
+generate SA1Yn = Y * A * S * w
+generate SA0Yn = Y * (1 - A) * S  * w
+generate SA1n = A * S * w
+generate SA0n = (1 - A) * S * w
+summ SA1Yn
+	local numeratorNew1n = r(sum)
+summ SA1n
+	local denominatorNew1n = r(sum)
+summ SA0Yn
+	local numeratorNew0n = r(sum)
+summ SA0n
+	local denominatorNew0n = r(sum)
+local IPW_newn1 = `=`numeratorNew1n' / `denominatorNew1n''
+local IPW_newn0 = `=`numeratorNew0n' / `denominatorNew0n''
+local IPW_newnDif = `=`numeratorNew1n' / `denominatorNew1n' ///
+		- `numeratorNew0n' / `denominatorNew0n''
+	
+/* IPW part */
+generate SA1Ypart = Y * A * S * wpart
+generate SA0Ypart = Y * (1 - A) * S  * wpart
+generate SA1part = A * S * wpart
+generate SA0part = (1 - A) * S * wpart
+summ SA1Ypart
+	local numeratorpart1 = r(sum)
+summ SA1part
+	local denominatorpart1 = r(sum)
+summ SA0Ypart
+	local numeratorpart0 = r(sum)
+summ SA0part
+	local denominatorpart0 = r(sum)
+	
+local IPW_part1 = `=`numeratorpart1' / `denominatorpart1''
+local IPW_part0 = `=`numeratorpart0' / `denominatorpart0''
+local IPW_partDif = `=`numeratorpart1' / `denominatorpart1' ///
+		- `numeratorpart0' / `denominatorpart0''
+	
+/* AIPW */	
+generate AIPW_cont1 = (S * A * Y) / (prS * prA) ///
+		- (( A * S - prS * prA)/(prS * prA)) * Y1
+	summ AIPW_cont1
+	local AIPW1 = r(mean)
+generate AIPW_cont0 = (S * (1 - A) * Y ) / (prS * (1 - prA)) ///
+		- (( (1- A) * S - prS * (1 - prA))/(prS * (1 - prA))) * Y0
+	summ AIPW_cont0
+	local AIPW0 = r(mean)
+	local AIPWDif = `AIPW1' - `AIPW0'	
+	
+/* g-formula */
+summ Y1
+	local Gform1 = r(mean)
+summ Y0
+	local Gform0 = r(mean)
+	
+local Gform1 = `Gform1'
+local Gform0 = `Gform0'
+local GformDif = `Gform1' - `Gform0'
+
+post `memory_holder' (`prev') (`m_size') ///
+					 (`IPW_newu1') (`IPW_newu0') (`IPW_newuDif')  ///
+					 (`IPW_newn1') (`IPW_newn0') (`IPW_newnDif') ///
+					 (`IPW_part1') (`IPW_part0') (`IPW_partDif') ///
+					 (`AIPW1') (`AIPW0') (`AIPWDif')   ///
+					 (`Gform1') (`Gform0') (`GformDif')
+}
+}
+}
+					 
+postclose `memory_holder'
