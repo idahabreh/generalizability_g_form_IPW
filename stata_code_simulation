@@ -3,11 +3,11 @@ clear all
 tempname memory_holder
 
 postfile `memory_holder' double(	prev m_size ///
-									IPW_newu1 IPW_newu0 IPW_newuDif  ///
-									IPW_newn1 IPW_newn0 IPW_newnDif ///
-									IPW_part1 IPW_part0 IPW_partDif ///
-									AIPW1 AIPW0 AIPWDif ///
-									Gform1 Gform0 GformDif) using "sim_res.dta", replace
+					IPW_newu1 IPW_newu0 IPW_newuDif  ///
+					IPW_newn1 IPW_newn0 IPW_newnDif ///
+					IPW_part1 IPW_part0 IPW_partDif ///
+					AIPW1 AIPW0 AIPWDif ///
+					Gform1 Gform0 GformDif) using "sim_res.dta", replace
 
 set seed 12345678
 
